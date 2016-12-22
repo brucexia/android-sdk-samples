@@ -1,7 +1,15 @@
 package com.affectiva.cameradetectordemo;
 
 import android.app.Activity;
+import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.PointF;
 import android.os.Bundle;
+import android.util.Log;
+import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,15 +23,24 @@ import com.affectiva.android.affdex.sdk.Frame;
 import com.affectiva.android.affdex.sdk.detector.CameraDetector;
 import com.affectiva.android.affdex.sdk.detector.Detector;
 import com.affectiva.android.affdex.sdk.detector.Face;
+import com.affectiva.cameradetectordemo.convexhull.FastConvexHull;
+import com.affectiva.cameradetectordemo.geomath.Geomath;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import static android.content.ContentValues.TAG;
 
 /**
  * This is a very bare sample app to demonstrate the usage of the CameraDetector object from Affectiva.
  * It displays statistics on frames per second, percentage of time a face was detected, and the user's smile score.
- *
+ * <p>
  * The app shows off the maneuverability of the SDK by allowing the user to start and stop the SDK and also hide the camera SurfaceView.
- *
+ * <p>
  * For use with SDK 2.02
  */
 public class MainActivity extends Activity implements Detector.ImageListener, CameraDetector.CameraEventListener {
@@ -49,6 +66,10 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
     int previewWidth = 0;
     int previewHeight = 0;
 
+    List<PointF> edgePoints;
+
+    PointF centerOfFace;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -63,7 +84,7 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                 isCameraBack = isChecked;
-                switchCamera(isCameraBack? CameraDetector.CameraType.CAMERA_BACK : CameraDetector.CameraType.CAMERA_FRONT);
+                switchCamera(isCameraBack ? CameraDetector.CameraType.CAMERA_BACK : CameraDetector.CameraType.CAMERA_FRONT);
             }
         });
 
@@ -86,35 +107,12 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
 
         //We create a custom SurfaceView that resizes itself to match the aspect ratio of the incoming camera frames
         mainLayout = (RelativeLayout) findViewById(R.id.main_layout);
-        cameraPreview = new SurfaceView(this) {
-            @Override
-            public void onMeasure(int widthSpec, int heightSpec) {
-                int measureWidth = MeasureSpec.getSize(widthSpec);
-                int measureHeight = MeasureSpec.getSize(heightSpec);
-                int width;
-                int height;
-                if (previewHeight == 0 || previewWidth == 0) {
-                    width = measureWidth;
-                    height = measureHeight;
-                } else {
-                    float viewAspectRatio = (float)measureWidth/measureHeight;
-                    float cameraPreviewAspectRatio = (float) previewWidth/previewHeight;
+        cameraPreview = new MySurfaceView(this);
 
-                    if (cameraPreviewAspectRatio > viewAspectRatio) {
-                        width = measureWidth;
-                        height =(int) (measureWidth / cameraPreviewAspectRatio);
-                    } else {
-                        width = (int) (measureHeight * cameraPreviewAspectRatio);
-                        height = measureHeight;
-                    }
-                }
-                setMeasuredDimension(width,height);
-            }
-        };
         RelativeLayout.LayoutParams params = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.addRule(RelativeLayout.CENTER_IN_PARENT,RelativeLayout.TRUE);
+        params.addRule(RelativeLayout.CENTER_IN_PARENT, RelativeLayout.TRUE);
         cameraPreview.setLayoutParams(params);
-        mainLayout.addView(cameraPreview,0);
+        mainLayout.addView(cameraPreview, 0);
 
         surfaceViewVisibilityButton = (Button) findViewById(R.id.surfaceview_visibility_button);
         surfaceViewVisibilityButton.setText("HIDE SURFACE VIEW");
@@ -169,8 +167,11 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
         detector.setCameraType(type);
     }
 
+    Frame currentFrame;
+
     @Override
     public void onImageResults(List<Face> list, Frame frame, float v) {
+        currentFrame = frame;
         if (list == null)
             return;
         if (list.size() == 0) {
@@ -179,7 +180,16 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
             ethnicityTextView.setText("");
         } else {
             Face face = list.get(0);
-            smileTextView.setText(String.format("SMILE\n%.2f",face.expressions.getSmile()));
+            FastConvexHull fastConvexHull = new FastConvexHull();
+            ArrayList<PointF> tmp = new ArrayList<>(Arrays.asList(face.getFacePoints()));
+            edgePoints = tmp;//fastConvexHull.execute(tmp);
+            centerOfFace = Geomath.centroid(face.getFacePoints());
+            byte[] pixels = ((Frame.ByteArrayFrame)frame).getByteArray();
+            Log.d("onDraw", String.format("frameWidth %d, frameHeight %d, bytes %d, color type %s", frame.getWidth(), frame.getHeight(), pixels.length
+            ,((Frame.ByteArrayFrame)frame).getColorFormat()));
+
+            cameraPreview.invalidate();
+            smileTextView.setText(String.format("SMILE\n%.2f", face.expressions.getSmile()));
             switch (face.appearance.getAge()) {
                 case AGE_UNKNOWN:
                     ageTextView.setText("");
@@ -242,5 +252,133 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
             previewWidth = width;
         }
         cameraPreview.requestLayout();
+    }
+
+    class MySurfaceView extends SurfaceView implements SurfaceHolder.Callback {
+        public MySurfaceView(Context context) {
+            super(context);
+            getHolder().addCallback(this);
+        }
+
+        @Override
+        public void onMeasure(int widthSpec, int heightSpec) {
+            int measureWidth = MeasureSpec.getSize(widthSpec);
+            int measureHeight = MeasureSpec.getSize(heightSpec);
+            int width;
+            int height;
+            if (previewHeight == 0 || previewWidth == 0) {
+                width = measureWidth;
+                height = measureHeight;
+            } else {
+                float viewAspectRatio = (float) measureWidth / measureHeight;
+                float cameraPreviewAspectRatio = (float) previewWidth / previewHeight;
+
+                if (cameraPreviewAspectRatio > viewAspectRatio) {
+                    width = measureWidth;
+                    height = (int) (measureWidth / cameraPreviewAspectRatio);
+                } else {
+                    width = (int) (measureHeight * cameraPreviewAspectRatio);
+                    height = measureHeight;
+                }
+            }
+            setMeasuredDimension(width, height);
+        }
+
+        TimerTask timerTask;
+        boolean timedout;
+
+        @Override
+        public void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+            if (centerOfFace != null) {
+//                float scaling = getScaling(this, currentFrame, canvas);
+                int frameWidth = currentFrame.getWidth();
+                int frameHeight = currentFrame.getHeight();
+                int canvasWidth = canvas.getWidth();
+                int canvasHeight = canvas.getHeight();
+                int scaledWidth;
+                int scaledHeight;
+                int topOffset = 0;
+                int leftOffset = 0;
+                float radius = (float) canvasWidth / 100f;
+                Frame.ROTATE frameRot = currentFrame.getTargetRotation();
+
+                Bitmap bitmap;
+                if (currentFrame instanceof Frame.BitmapFrame) {
+                    bitmap = ((Frame.BitmapFrame)currentFrame).getBitmap();
+                } else { //frame is ByteArrayFrame
+                    byte[] pixels = ((Frame.ByteArrayFrame)currentFrame).getByteArray();
+                    ByteBuffer buffer = ByteBuffer.wrap(pixels);
+                    Log.d("onDraw", String.format("frameWidth %d, frameHeight %d, bytes %d", frameWidth, frameHeight, pixels.length));
+//                    bitmap = BitmapFactory.decodeByteArray(pixels,0,pixels.length);
+//                    Bitmap.createBitmap(frameWidth, frameHeight, new BuildConfig(currentFrame.getColorFormat()));
+//                    Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888);
+//                    bitmap.copyPixelsFromBuffer(buffer);
+//                    bitmap.recycle();
+                }
+                if (frameRot == Frame.ROTATE.BY_90_CCW || frameRot == Frame.ROTATE.BY_90_CW) {
+                    int temp = frameWidth;
+                    frameWidth = frameHeight;
+                    frameHeight = temp;
+                }
+
+                float frameAspectRatio = (float) frameWidth / (float) frameHeight;
+                float canvasAspectRatio = (float) canvasWidth / (float) canvasHeight;
+                if (frameAspectRatio > canvasAspectRatio) { //width should be the same
+                    scaledWidth = canvasWidth;
+                    scaledHeight = (int) ((float) canvasWidth / frameAspectRatio);
+                    topOffset = (canvasHeight - scaledHeight) / 2;
+                } else { //height should be the same
+                    scaledHeight = canvasHeight;
+                    scaledWidth = (int) ((float) canvasHeight * frameAspectRatio);
+                    leftOffset = (canvasWidth - scaledWidth) / 2;
+                }
+
+                float scaling = (float) scaledWidth / (float) currentFrame.getWidth();
+
+                Log.d("onDraw", String.format("calculated scaling %f, leftOffset %d, topOffset %d", scaling, leftOffset, topOffset));
+                if (timedout) {
+                    Paint paint = new Paint();
+                    paint.setColor(getColor(android.R.color.holo_red_dark));
+                    paint.setStrokeWidth(50);
+                    for (PointF pointF : edgePoints) {
+                        canvas.drawPoint(pointF.x * scaling + leftOffset, pointF.y * scaling + topOffset, paint);
+                    }
+                } else {
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                     bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img_angrybird_head);
+//                    canvas.drawBitmap(bitmap, centerOfFace.x, centerOfFace.y, null);
+                    Paint paint = new Paint();
+                    paint.setColor(getColor(android.R.color.holo_orange_dark));
+                    paint.setStrokeWidth(50);
+                    canvas.drawPoint(centerOfFace.x,centerOfFace.y,paint);
+                    if (timerTask == null) {
+                        timerTask = new TimerTask() {
+                            @Override
+                            public void run() {
+                                timerTask = null;
+                                timedout = true;
+                            }
+                        };
+                        new Timer().schedule(timerTask, 5000);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void surfaceCreated(SurfaceHolder surfaceHolder) {
+            setWillNotDraw(false);
+        }
+
+        @Override
+        public void surfaceChanged(SurfaceHolder surfaceHolder, int i, int i1, int i2) {
+
+        }
+
+        @Override
+        public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
+
+        }
     }
 }

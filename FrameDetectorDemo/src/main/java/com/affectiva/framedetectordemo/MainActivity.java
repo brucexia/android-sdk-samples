@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * This is a sample app using the FrameDetector object, which is not multi-threaded, and running it on a background thread in a custom object called
  * AsyncFrameDetector.
- *
+ * <p>
  * This app also contains sample code for using the camera.
  */
 public class MainActivity extends Activity implements CameraView.OnCameraViewEventListener, AsyncFrameDetector.OnDetectorEventListener {
@@ -35,7 +35,7 @@ public class MainActivity extends Activity implements CameraView.OnCameraViewEve
     ToggleButton frontBackToggle;
 
     //state booleans
-    boolean isCameraStarted  = false;
+    boolean isCameraStarted = false;
     boolean isCameraFront = true;
     boolean isCameraRequestedByUser = false;
     boolean isSDKRunning = false;
@@ -60,7 +60,7 @@ public class MainActivity extends Activity implements CameraView.OnCameraViewEve
 
         //set up metrics view
         metricsPanel = new MetricsPanel();
-        getFragmentManager().beginTransaction().add(R.id.fragment_container,metricsPanel).commit();
+        getFragmentManager().beginTransaction().add(R.id.fragment_container, metricsPanel).commit();
 
         //Init TextViews
         cameraFPS = (TextView) findViewById(R.id.camera_fps_text);
@@ -171,17 +171,17 @@ public class MainActivity extends Activity implements CameraView.OnCameraViewEve
     private void setMetricTextViewText(Face face) {
         // set the text for all the numeric metrics (scored or measured)
         for (Metrics metric : Metrics.getEmotions()) {
-            metricsPanel.setMetricFloatValue(metric,getScore(metric,face));
+            metricsPanel.setMetricFloatValue(metric, getScore(metric, face));
         }
         for (Metrics metric : Metrics.getExpressions()) {
-            metricsPanel.setMetricFloatValue(metric,getScore(metric,face));
+            metricsPanel.setMetricFloatValue(metric, getScore(metric, face));
         }
         for (Metrics metric : Metrics.getMeasurements()) {
-            metricsPanel.setMetricFloatValue(metric,getScore(metric,face));
+            metricsPanel.setMetricFloatValue(metric, getScore(metric, face));
         }
 
         // set the text for the appearance metrics
-        String textValue="";
+        String textValue = "";
 
         switch (face.appearance.getGlasses()) {
             case NO:
@@ -376,10 +376,10 @@ public class MainActivity extends Activity implements CameraView.OnCameraViewEve
         numberCameraFramesReceived += 1;
         cameraFPS.setText(String.format("CAM: %.3f", 1000f * (float) numberCameraFramesReceived / (SystemClock.elapsedRealtime() - lastCameraFPSResetTime)));
 
-        float timeStamp = (float)SystemClock.elapsedRealtime()/1000f;
+        float timeStamp = (float) SystemClock.elapsedRealtime() / 1000f;
         if (timeStamp > (lastTimestamp + epsilon)) {
             lastTimestamp = timeStamp;
-            asyncDetector.process(createFrameFromData(frame,width,height,rotation),timeStamp);
+            asyncDetector.process(createFrameFromData(frame, width, height, rotation), timeStamp);
         }
     }
 
@@ -405,7 +405,7 @@ public class MainActivity extends Activity implements CameraView.OnCameraViewEve
 
         if (faces == null)
             return; //No Face Detected
-        if (faces.size() ==0) {
+        if (faces.size() == 0) {
             for (Metrics metric : Metrics.values()) {
                 metricsPanel.setMetricNA(metric);
             }
