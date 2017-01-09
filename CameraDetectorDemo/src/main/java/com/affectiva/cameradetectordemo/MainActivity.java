@@ -181,12 +181,14 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
         } else {
             Face face = list.get(0);
             FastConvexHull fastConvexHull = new FastConvexHull();
+//            ((DrawingView) cameraPreview).drawFrame(frame, face.getFacePoints());
+            cameraPreview.invalidate();
             ArrayList<PointF> tmp = new ArrayList<>(Arrays.asList(face.getFacePoints()));
             edgePoints = tmp;//fastConvexHull.execute(tmp);
             centerOfFace = Geomath.centroid(face.getFacePoints());
-            byte[] pixels = ((Frame.ByteArrayFrame)frame).getByteArray();
+            byte[] pixels = ((Frame.ByteArrayFrame) frame).getByteArray();
             Log.d("onDraw", String.format("frameWidth %d, frameHeight %d, bytes %d, color type %s", frame.getWidth(), frame.getHeight(), pixels.length
-            ,((Frame.ByteArrayFrame)frame).getColorFormat()));
+                    , ((Frame.ByteArrayFrame) frame).getColorFormat()));
 
             cameraPreview.invalidate();
             smileTextView.setText(String.format("SMILE\n%.2f", face.expressions.getSmile()));
@@ -288,8 +290,12 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
         boolean timedout;
 
         @Override
-        public void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
+        public void draw(Canvas canvas) {
+            super.draw(canvas);
+//        }
+
+//        @Override
+//        public void onDraw(Canvas canvas) {
             if (centerOfFace != null) {
 //                float scaling = getScaling(this, currentFrame, canvas);
                 int frameWidth = currentFrame.getWidth();
@@ -305,14 +311,14 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
 
                 Bitmap bitmap;
                 if (currentFrame instanceof Frame.BitmapFrame) {
-                    bitmap = ((Frame.BitmapFrame)currentFrame).getBitmap();
+                    bitmap = ((Frame.BitmapFrame) currentFrame).getBitmap();
                 } else { //frame is ByteArrayFrame
-                    byte[] pixels = ((Frame.ByteArrayFrame)currentFrame).getByteArray();
+                    byte[] pixels = ((Frame.ByteArrayFrame) currentFrame).getByteArray();
                     ByteBuffer buffer = ByteBuffer.wrap(pixels);
-                    Log.d("onDraw", String.format("frameWidth %d, frameHeight %d, bytes %d", frameWidth, frameHeight, pixels.length));
-//                    bitmap = BitmapFactory.decodeByteArray(pixels,0,pixels.length);
-//                    Bitmap.createBitmap(frameWidth, frameHeight, new BuildConfig(currentFrame.getColorFormat()));
-//                    Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888);
+                    Log.d("onDraw", String.format("frameWidth %d, frameHeight %d, canvas width %d, canvas height %s, bytes %d",
+                            frameWidth, frameHeight, canvas.getWidth(), canvas.getHeight(), pixels.length));
+                    bitmap = BitmapFactory.decodeByteArray(pixels, 0, pixels.length);
+//                    bitmap = Bitmap.createBitmap(frameWidth, frameHeight, Bitmap.Config.ARGB_8888);
 //                    bitmap.copyPixelsFromBuffer(buffer);
 //                    bitmap.recycle();
                 }
@@ -335,6 +341,7 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
                 }
 
                 float scaling = (float) scaledWidth / (float) currentFrame.getWidth();
+                super.draw(canvas);
 
                 Log.d("onDraw", String.format("calculated scaling %f, leftOffset %d, topOffset %d", scaling, leftOffset, topOffset));
                 if (timedout) {
@@ -346,12 +353,12 @@ public class MainActivity extends Activity implements Detector.ImageListener, Ca
                     }
                 } else {
                     BitmapFactory.Options options = new BitmapFactory.Options();
-                     bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img_angrybird_head);
+                    bitmap = BitmapFactory.decodeResource(getResources(), R.drawable.img_angrybird_head);
 //                    canvas.drawBitmap(bitmap, centerOfFace.x, centerOfFace.y, null);
                     Paint paint = new Paint();
                     paint.setColor(getColor(android.R.color.holo_orange_dark));
                     paint.setStrokeWidth(50);
-                    canvas.drawPoint(centerOfFace.x,centerOfFace.y,paint);
+                    canvas.drawPoint(centerOfFace.x * scaling + leftOffset, centerOfFace.y * scaling + topOffset, paint);
                     if (timerTask == null) {
                         timerTask = new TimerTask() {
                             @Override

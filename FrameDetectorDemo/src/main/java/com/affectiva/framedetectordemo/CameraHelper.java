@@ -406,7 +406,7 @@ class CameraHelper extends OrientationEventListener implements SurfaceHolder.Cal
             try {
                 result = open(cameraID); // attempt to get a Camera instance.
             } catch (RuntimeException e) {
-                // Camera is not available (in use or does not exist). Translate to a more appropriate exception type.
+                // Camera is not available O (in use or does not exist). Translate to a more appropriate exception type.
                 String msg = "Camera is unavailable. Please close the app that is using the camera and then try again.\n"
                         + "Error:  " + e.getMessage();
                 throw new IllegalStateException(msg, e);
